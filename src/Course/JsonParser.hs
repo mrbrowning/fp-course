@@ -41,32 +41,19 @@ data SpecialCharacter =
   deriving (Eq, Ord, Show)
 
 -- NOTE: This is not inverse to @toSpecialCharacter@.
-fromSpecialCharacter ::
-  SpecialCharacter
-  -> Char
-fromSpecialCharacter BackSpace =
-  chr 0x08
-fromSpecialCharacter FormFeed =
-  chr 0x0C
-fromSpecialCharacter NewLine =
-  '\n'
-fromSpecialCharacter CarriageReturn =
-  '\r'
-fromSpecialCharacter Tab =
-  '\t'
-fromSpecialCharacter VerticalTab =
-  '\v'
-fromSpecialCharacter SingleQuote =
-  '\''
-fromSpecialCharacter DoubleQuote =
-  '"'
-fromSpecialCharacter Backslash =
-  '\\'
+fromSpecialCharacter :: SpecialCharacter -> Char
+fromSpecialCharacter BackSpace = chr 0x08
+fromSpecialCharacter FormFeed = chr 0x0C
+fromSpecialCharacter NewLine = '\n'
+fromSpecialCharacter CarriageReturn = '\r'
+fromSpecialCharacter Tab = '\t'
+fromSpecialCharacter VerticalTab = '\v'
+fromSpecialCharacter SingleQuote = '\''
+fromSpecialCharacter DoubleQuote = '"'
+fromSpecialCharacter Backslash = '\\'
 
 -- NOTE: This is not inverse to @fromSpecialCharacter@.
-toSpecialCharacter ::
-  Char
-  -> Optional SpecialCharacter
+toSpecialCharacter :: Char -> Optional SpecialCharacter
 toSpecialCharacter c =
   let table = ('b', BackSpace) :.
               ('f', FormFeed) :.
@@ -79,6 +66,31 @@ toSpecialCharacter c =
               ('\\', Backslash) :.
               Nil
   in snd <$> find ((==) c . fst) table
+
+specialCharMapping :: List (Char, Chars)
+specialCharMapping =
+    ('\b', "\\b") :.
+    ('\f', "\\f") :.
+    ('\n', "\\n") :.
+    ('\r', "\\r") :.
+    ('\t', "\\t") :.
+    ('\v', "\\v") :.
+    ('\\', "\\\\") :.
+    Nil
+
+toSpecialCharString :: Char -> Chars
+toSpecialCharString c =
+    let val = snd <$> find ((==) c . fst) specialCharMapping
+    in case val of
+        Empty -> (\x -> x :. Nil) c
+        Full s -> s
+
+fromSpecialCharString :: Chars -> Char
+fromSpecialCharString s =
+    let val = fst <$> find ((==) s . snd) specialCharMapping
+    in case val of
+        Empty -> error "welp"
+        Full c -> c
   
 -- | Parse a JSON string. Handle double-quotes, special characters, hexadecimal characters. See http://json.org for the full list of control characters in JSON.
 --
@@ -107,10 +119,29 @@ toSpecialCharacter c =
 --
 -- >>> isErrorResult (parse jsonString "\"\\abc\"def")
 -- True
-jsonString ::
-  Parser Chars
-jsonString =
-  error "todo: Course.JsonParser#jsonString"
+jsonString :: Parser Chars
+jsonString = between
+    (is '"')
+    (is '"')
+    ((foldRight (++) Nil) <$>
+        (list $
+            ((\x -> x :. Nil) <$> hexParser) |||
+            ((\x -> x :. Nil) <$> specialCharParser) |||
+        ((\x -> x :. Nil) <$> satisfyAll (((/=) '"') :. ((/=) '\\') :. Nil))))
+
+isNot :: Char -> Parser Char
+isNot c = satisfy $ not . (==c)
+
+specialCharParser :: Parser Char
+specialCharParser =
+    fromSpecialCharString <$>
+    (foldRight (|||) failed $ (map string) . (map toSpecialCharString) $ specialCharacters)
+
+specialCharacters :: List Char
+specialCharacters = (chr 0x08 :. chr 0x0C :. '\n' :. '\r' :. '\t' :. '\v' :. '\'' :. '\\' :. Nil)
+
+hexParser :: Parser Char
+hexParser = string "\\u" *> hex
 
 -- | Parse a JSON rational.
 --
@@ -136,10 +167,18 @@ jsonString =
 --
 -- >>> isErrorResult (parse jsonNumber "abc")
 -- True
-jsonNumber ::
-  Parser Rational
-jsonNumber =
-  error "todo: Course.JsonParser#jsonNumber"
+jsonNumber :: Parser Rational
+jsonNumber = f =<< ((++) <$> oneOrZero "-" <*> ((++) <$> digits1 <*> (((++) <$> string "." <*> digits1) ||| valueParser "")))
+    where
+        f :: Chars -> Parser Rational
+        f s =
+            let r = readFloats s
+            in case r of
+                Empty -> failed
+                Full (x, _) -> valueParser x
+
+oneOrZero :: Chars -> Parser Chars
+oneOrZero s = string s ||| valueParser ""
 
 -- | Parse a JSON true literal.
 --
@@ -150,10 +189,8 @@ jsonNumber =
 --
 -- >>> isErrorResult (parse jsonTrue "TRUE")
 -- True
-jsonTrue ::
-  Parser Chars
-jsonTrue =
-  error "todo: Course.JsonParser#jsonTrue"
+jsonTrue :: Parser Chars
+jsonTrue = stringTok "true"
 
 -- | Parse a JSON false literal.
 --
@@ -164,10 +201,8 @@ jsonTrue =
 --
 -- >>> isErrorResult (parse jsonFalse "FALSE")
 -- True
-jsonFalse ::
-  Parser Chars
-jsonFalse =
-  error "todo: Course.JsonParser#jsonFalse"
+jsonFalse :: Parser Chars
+jsonFalse = stringTok "false"
 
 -- | Parse a JSON null literal.
 --
@@ -178,10 +213,8 @@ jsonFalse =
 --
 -- >>> isErrorResult (parse jsonNull "NULL")
 -- True
-jsonNull ::
-  Parser Chars
-jsonNull =
-  error "todo: Course.JsonParser#jsonNull"
+jsonNull :: Parser Chars
+jsonNull = stringTok "null"
 
 -- | Parse a JSON array.
 --
@@ -201,10 +234,8 @@ jsonNull =
 --
 -- >>> parse jsonArray "[true, \"abc\", [false]]"
 -- Result >< [JsonTrue,JsonString "abc",JsonArray [JsonFalse]]
-jsonArray ::
-  Parser (List JsonValue)
-jsonArray =
-  error "todo: Course.JsonParser#jsonArray"
+jsonArray :: Parser (List JsonValue)
+jsonArray = betweenSepbyComma '[' ']' jsonValue
 
 -- | Parse a JSON object.
 --
@@ -221,10 +252,23 @@ jsonArray =
 --
 -- >>> parse jsonObject "{ \"key1\" : true , \"key2\" : false } xyz"
 -- Result >xyz< [("key1",JsonTrue),("key2",JsonFalse)]
-jsonObject ::
-  Parser Assoc
-jsonObject =
-  error "todo: Course.JsonParser#jsonObject"
+jsonObject :: Parser Assoc
+jsonObject = betweenSepbyComma '{' '}' jsonAssoc
+
+jsonAssoc :: Parser (Chars, JsonValue)
+jsonAssoc = (,) <$> ((flip strip $ "\"") <$> jsonString) <* spaces <* charTok ':' <*> jsonValue
+
+strip :: Chars -> Chars -> Chars
+strip Nil _ = Nil
+strip s Nil = s
+strip (c :. cs) xs =
+        let s = f cs Nil
+        in if elem c xs then s else c :. s
+    where
+        f Nil acc = reverse acc
+        f (c' :. Nil) acc = if elem c' xs then f Nil acc else f Nil (c' :. acc)
+        f (c' :. cs') acc = f cs' (c' :. acc)
+
 
 -- | Parse a JSON value.
 --
@@ -238,16 +282,20 @@ jsonObject =
 --
 -- >>> parse jsonObject "{ \"key1\" : true , \"key2\" : [7, false] , \"key3\" : { \"key4\" : null } }"
 -- Result >< [("key1",JsonTrue),("key2",JsonArray [JsonRational False (7 % 1),JsonFalse]),("key3",JsonObject [("key4",JsonNull)])]
-jsonValue ::
-  Parser JsonValue
+jsonValue :: Parser JsonValue
 jsonValue =
-   error "todo: Course.JsonParser#jsonValue"
+    spaces *>
+    (((\_ -> JsonTrue) <$> jsonTrue) |||
+    ((\_ -> JsonFalse) <$> jsonFalse) |||
+    ((\_ -> JsonNull) <$> jsonNull) |||
+    (JsonString <$> jsonString) |||
+    (JsonRational True <$> jsonNumber) |||
+    (JsonArray <$> jsonArray) |||
+    (JsonObject <$> jsonObject)) <*
+    spaces
 
 -- | Read a file into a JSON value.
 --
 -- /Tip:/ Use @System.IO#readFile@ and `jsonValue`.
-readJsonValue ::
-  Filename
-  -> IO (ParseResult JsonValue)
-readJsonValue =
-  error "todo: Course.JsonParser#readJsonValue"
+readJsonValue :: Filename -> IO (ParseResult JsonValue)
+readJsonValue f = (pure . parse jsonValue) =<< readFile f

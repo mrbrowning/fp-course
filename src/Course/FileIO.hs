@@ -71,43 +71,39 @@ the contents of c
 -}
 
 -- /Tip:/ use @getArgs@ and @run@
-main ::
-  IO ()
-main =
-  error "todo: Course.FileIO#main"
+main :: IO ()
+main = do
+    path <- getArgs
+    run $ headOr "share/files.txt" path
 
-type FilePath =
-  Chars
+type FilePath = Chars
 
 -- /Tip:/ Use @getFiles@ and @printFiles@.
-run ::
-  Chars
-  -> IO ()
-run =
-  error "todo: Course.FileIO#run"
+run :: Chars -> IO ()
+run path = do
+    (_, directory) <- getFile path
+    contents <- getFiles $ filter ((/=) Nil) $ lines directory
+    forM contents (\(path', cs) -> printFile "/dev/stdout" $ format path' cs)
+    return ()
 
-getFiles ::
-  List FilePath
-  -> IO (List (FilePath, Chars))
-getFiles =
-  error "todo: Course.FileIO#getFiles"
+format :: FilePath -> Chars -> Chars
+format path cs = "============ " ++ path ++ "\n" ++ cs ++ "\n"
 
-getFile ::
-  FilePath
-  -> IO (FilePath, Chars)
-getFile =
-  error "todo: Course.FileIO#getFile"
+getFiles :: List FilePath -> IO (List (FilePath, Chars))
+getFiles fs = forM fs getFile
 
-printFiles ::
-  List (FilePath, Chars)
-  -> IO ()
-printFiles =
-  error "todo: Course.FileIO#printFiles"
+getFile :: FilePath -> IO (FilePath, Chars)
+getFile path = do
+    contents <- readFile path
+    return (path, contents)
 
-printFile ::
-  FilePath
-  -> Chars
-  -> IO ()
-printFile =
-  error "todo: Course.FileIO#printFile"
+forM :: Applicative m => List a -> (a -> m b) -> m (List b)
+forM xs f = sequence $ map f xs
 
+printFiles :: List (FilePath, Chars) -> IO ()
+printFiles fs = do
+    forM fs (\(path, cs) -> printFile path cs)
+    return ()
+
+printFile :: FilePath -> Chars -> IO ()
+printFile = writeFile
