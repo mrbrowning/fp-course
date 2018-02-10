@@ -4,25 +4,15 @@ module Network.Server.Common.Lens where
 --
 -- The type parameter 'a' denotes the target object.
 -- The type parameter 'b' denotes the field object.
-data Lens a b =
-  Lens (a -> b -> a) (a -> b)
+data Lens a b = Lens (a -> b -> a) (a -> b)
 
 -- | Given a lens and a target object, return its field object.
-getL ::
-  Lens a b
-  -> a
-  -> b
-getL (Lens _ g) =
-  g
+getL :: Lens a b -> a -> b
+getL (Lens _ g) = g
 
 -- | Given a lens, a target object and a field object, return a new target object with the field set.
-setL ::
-  Lens a b
-  -> a
-  -> b
-  -> a
-setL (Lens s _) =
-  s
+setL :: Lens a b -> a -> b -> a
+setL (Lens s _) = s
 
 -- | Produce the lens for the first element of a pair.
 --
@@ -31,10 +21,8 @@ setL (Lens s _) =
 --
 -- >>> setL fstL ("hi", 3) "bye"
 -- ("bye",3)
-fstL ::
-  Lens (a, b) a
-fstL =
-  Lens (\(_, b) a -> (a, b)) fst
+fstL :: Lens (a, b) a
+fstL = Lens (\(_, b) a -> (a, b)) fst
 
 -- | Produce the lens for the second element of a pair.
 --
@@ -43,10 +31,8 @@ fstL =
 --
 -- >>> setL sndL ("hi", 3) 4
 -- ("hi",4)
-sndL ::
-  Lens (a, b) b
-sndL =
-  Lens (\(a, _) b -> (a, b)) snd
+sndL :: Lens (a, b) b
+sndL = Lens (\(a, _) b -> (a, b)) snd
 
 -- | Lens composition.
 -- Given lens (a to b) and lens (b to c), produce lens (a to c).
@@ -56,12 +42,8 @@ sndL =
 --
 -- >>> setL (fstL .@ sndL) (("hi", 3), [7,8,9]) 4
 -- (("hi",4),[7,8,9])
-(.@) ::
-  Lens a b
-  -> Lens b c
-  -> Lens a c
-Lens s1 g1 .@ Lens s2 g2 =
-  Lens (\a -> s1 a . s2 (g1 a)) (g2 . g1)
+(.@) :: Lens a b -> Lens b c -> Lens a c
+Lens s1 g1 .@ Lens s2 g2 = Lens (\a -> s1 a . s2 (g1 a)) (g2 . g1)
 
 -- | Lens identity.
 -- Produce lens that /does nothing/.
@@ -69,10 +51,8 @@ Lens s1 g1 .@ Lens s2 g2 =
 -- prop> getL identityL (x :: Int) == x
 --
 -- prop> setL identityL x (y :: Int) == y
-identityL ::
-  Lens a a
-identityL =
-  Lens (const id) id
+identityL :: Lens a a
+identityL = Lens (const id) id
 
 -- | Lens modification.
 -- Given a lens and a modification function on the field object
@@ -80,17 +60,8 @@ identityL =
 --
 -- >>> modify fstL (+10) (4, "hi")
 -- (14,"hi")
-modify ::
-  Lens a b
-  -> (b -> b)
-  -> a
-  -> a
-modify (Lens s g) f a =
-  s a (f (g a))
+modify :: Lens a b -> (b -> b) -> a -> a
+modify (Lens s g) f a = s a (f (g a))
 
-iso ::
-  (a -> b)
-  -> (b -> a)
-  -> Lens a b
-iso f g =
-  Lens (const g) f
+iso :: (a -> b) -> (b -> a) -> Lens a b
+iso f g = Lens (const g) f
